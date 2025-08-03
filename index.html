@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global CO2 Emissions: A Climate Story</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .data-source {
+            text-align: center;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            opacity: 0.8;
+            font-style: italic;
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .nav-button {
+            padding: 12px 25px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 25px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .nav-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-button.active {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+
+        .scene {
+            display: none;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .scene.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .scene-content {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+
+        .chart-container {
+            flex: 2;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-panel {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .annotation {
+            background: rgba(255, 193, 7, 0.9);
+            color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #ff9800;
+            font-weight: 500;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .slider {
+            width: 80%;
+            margin: 10px;
+            accent-color: #ff9800;
+        }
+
+        .year-display {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #ff9800;
+            margin: 10px 0;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 12px;
+            border: 1px solid #ccc;
+            z-index: 1000;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+        }
+
+        .error {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #ff6b6b;
+        }
+
+        .axis {
+            color: #333;
+        }
+
+        .axis text {
+            fill: #333;
+            font-size: 12px;
+        }
+
+        .axis path, .axis line {
+            stroke: #333;
+            stroke-width: 1;
+        }
+
+        .grid line {
+            stroke: #ddd;
+            stroke-dasharray: 3,3;
+        }
+
+        .grid path {
+            stroke-width: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Global CO2 Emissions: A Climate Story</h1>
+        <p class="subtitle">Understanding the drivers of climate change through real data</p>
+        <p class="data-source">Data Source: Our World in Data CO2 and Greenhouse Gas Emissions Dataset (Global Carbon Budget 2024)</p>
+        
+        <div id="loading" class="loading">Loading CO2 emissions data...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="main-content" style="display: none;">
+            <div class="navigation">
+                <button class="nav-button active" onclick="showScene(1)">Global Timeline</button>
+                <button class="nav-button" onclick="showScene(2)">Top Emitters 2022</button>
+                <button class="nav-button" onclick="showScene(3)">Interactive Explorer</button>
+            </div>
+
+            <!-- Scene 1: Global Timeline -->
+            <div id="scene1" class="scene active">
+                <div class="scene-content">
+                    <div class="chart-container">
+                        <div id="chart1"></div>
+                    </div>
+                    <div class="info-panel">
+                        <h3>The Accelerating Crisis</h3>
+                        <div class="annotation">
+                            <strong>Key Insight:</strong> Global CO2 emissions have grown dramatically from 1990 to 2022, with emissions now exceeding 36 billion tonnes annually - a pattern that threatens global climate stability.
+                        </div>
+                        <p>This timeline reveals the relentless growth in global carbon dioxide emissions from fossil fuel combustion and industrial processes over more than three decades of real data.</p>
+                        <p><strong>Notable patterns:</strong> Steady growth interrupted only by economic crises (2008-2009) and the COVID-19 pandemic (2020), followed by rapid recovery to record levels.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scene 2: Country Comparison -->
+            <div id="scene2" class="scene">
+                <div class="scene-content">
+                    <div class="chart-container">
+                        <div id="chart2"></div>
+                    </div>
+                    <div class="info-panel">
+                        <h3>The Concentration of Emissions</h3>
+                        <div class="annotation">
+                            <strong>Key Insight:</strong> Just 10 countries account for approximately 67% of global CO2 emissions, with China alone responsible for over 30% of the world's emissions.
+                        </div>
+                        <p>This visualization shows how CO2 emissions are heavily concentrated among a small number of countries, primarily large economies and fossil fuel-dependent nations.</p>
+                        <p><strong>Interactive Feature:</strong> Hover over bars to see exact emissions and global share percentages based on real 2022 data.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scene 3: Interactive Explorer -->
+            <div id="scene3" class="scene">
+                <div class="scene-content">
+                    <div class="chart-container">
+                        <div class="controls">
+                            <div class="year-display">Year: <span id="current-year">2022</span></div>
+                            <input type="range" class="slider" id="year-slider" min="1990" max="2022" value="2022" step="1">
+                        </div>
+                        <div id="chart3"></div>
+                    </div>
+                    <div class="info-panel">
+                        <h3>Evolution of Global Emissions</h3>
+                        <div class="annotation">
+                            <strong>Explore:</strong> Watch China's remarkable transformation from a moderate emitter in 1990 to the world's largest by 2006, fundamentally reshaping the global emissions landscape.
+                        </div>
+                        <p>Use the time slider to witness how the global emissions hierarchy has transformed over three decades of real data.</p>
+                        <p><strong>Key transformation:</strong> China's emissions increased over 400% while many developed nations plateaued or declined in relative terms.</p>
+                        <div id="scene3-insights"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global parameters (state variables)
+        let currentScene = 1;
+        let selectedYear = 2022;
+        let globalData = [];
+        let processedData = {};
+        
+        // Chart dimensions and margins
+        const margin = { top: 40, right: 40, bottom: 80, left: 100 };
+        const width = 700 - margin.left - margin.right;
+        const height = 450 - margin.top - margin.bottom;
+
+        // Color scale for top countries
+        const colorScale = d3.scaleOrdinal()
+            .domain(['China', 'United States', 'India', 'Russia', 'Japan', 'Germany', 'Iran', 'Saudi Arabia', 'Indonesia', 'South Korea'])
+            .range(['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#2ecc71', '#34495e', '#e67e22', '#1abc9c', '#f1c40f', '#95a5a6']);
+
+        // Load and process real CO2 data
+        async function loadData() {
+            try {
+                const data = await d3.csv("data/owid-co2-data.csv");
+                
+                // Filter and process the data
+                globalData = data
+                    .filter(d => {
+                        return d.year >= 1990 && 
+                               d.year <= 2022 && 
+                               d.co2 && 
+                               d.co2 !== "" && 
+                               !isNaN(+d.co2) && 
+                               +d.co2 > 0 &&
+                               d.country !== "World" && // Exclude world aggregates
+                               !d.country.includes("(") && // Exclude regional groupings
+                               d.iso_code && // Only include countries with ISO codes
+                               d.iso_code.length === 3; // Standard 3-letter country codes
+                    })
+                    .map(d => ({
+                        country: d.country,
+                        year: +d.year,
+                        emissions: +d.co2, // CO2 emissions in million tonnes
+                        iso_code: d.iso_code
+                    }));
+
+                console.log(`Loaded ${globalData.length} records`);
+                
+                if (globalData.length === 0) {
+                    throw new Error("No valid data found in the CSV file");
+                }
+
+                processedData = processData(globalData);
+                
+                // Hide loading, show content
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("main-content").style.display = "block";
+                
+                // Initialize visualization
+                initializeVisualization();
+                
+            } catch (error) {
+                console.error("Error loading data:", error);
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("error").style.display = "block";
+                document.getElementById("error").textContent = `Error loading data: ${error.message}. Please ensure the file 'data/owid-co2-data.csv' is available.`;
+            }
+        }
+
+        // Process data for visualizations
+        function processData(data) {
+            const processed = {
+                timeline: [],
+                byYear: {},
+                byCountry: {},
+                globalTotals: {}
+            };
+
+            // Calculate global totals by year
+            const globalByYear = d3.rollup(data, 
+                v => d3.sum(v, d => d.emissions),
+                d => d.year
+            );
+            
+            processed.timeline = Array.from(globalByYear, ([year, total]) => ({
+                year: year,
+                total: total
+            })).sort((a, b) => a.year - b.year);
+
+            // Store global totals for percentage calculations
+            processed.globalTotals = Object.fromEntries(globalByYear);
+
+            // Group by year and country
+            data.forEach(d => {
+                if (!processed.byYear[d.year]) {
+                    processed.byYear[d.year] = [];
+                }
+                processed.byYear[d.year].push(d);
+                
+                if (!processed.byCountry[d.country]) {
+                    processed.byCountry[d.country] = [];
+                }
+                processed.byCountry[d.country].push(d);
+            });
+
+            // Sort countries by emissions for each year
+            Object.keys(processed.byYear).forEach(year => {
+                processed.byYear[year].sort((a, b) => b.emissions - a.emissions);
+            });
+
+            return processed;
+        }
+
+        // Create Scene 1: Global Timeline
+        function createScene1() {
+            const container = d3.select("#chart1");
+            container.selectAll("*").remove();
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+
+            const g = svg.append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Scales
+            const xScale = d3.scaleLinear()
+                .domain(d3.extent(processedData.timeline, d => d.year))
+                .range([0, width]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(processedData.timeline, d => d.total)])
+                .range([height, 0]);
+
+            // Add grid
+            g.append("g")
+                .attr("class", "grid")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickSize(-height)
+                    .tickFormat("")
+                );
+
+            g.append("g")
+                .attr("class", "grid")
+                .call(d3.axisLeft(yScale)
+                    .tickSize(-width)
+                    .tickFormat("")
+                );
+
+            // Line generator
+            const line = d3.line()
+                .x(d => xScale(d.year))
+                .y(d => yScale(d.total))
+                .curve(d3.curveMonotoneX);
+
+            // Add the area under the line
+            const area = d3.area()
+                .x(d => xScale(d.year))
+                .y0(height)
+                .y1(d => yScale(d.total))
+                .curve(d3.curveMonotoneX);
+
+            g.append("path")
+                .datum(processedData.timeline)
+                .attr("fill", "rgba(231, 76, 60, 0.1)")
+                .attr("d", area);
+
+            // Add the line
+            g.append("path")
+                .datum(processedData.timeline)
+                .attr("fill", "none")
+                .attr("stroke", "#e74c3c")
+                .attr("stroke-width", 3)
+                .attr("d", line);
+
+            // Add dots for all years with hover
+            g.selectAll(".dot")
+                .data(processedData.timeline)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.year))
+                .attr("cy", d => yScale(d.total))
+                .attr("r", 3)
+                .attr("fill", "#e74c3c")
+                .attr("stroke", "white")
+                .attr("stroke-width", 1)
+                .on("mouseover", function(event, d) {
+                    d3.select(this).attr("r", 6);
+                    showTooltip(event, `Year: ${d.year}<br>Global Emissions: ${Math.round(d.total).toLocaleString()} Mt CO2`);
+                })
+                .on("mouseout", function() {
+                    d3.select(this).attr("r", 3);
+                    hideTooltip();
+                });
+
+            // Add axes
+            g.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+
+            g.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(yScale).tickFormat(d => `${(d/1000).toFixed(0)}B`));
+
+            // Add labels
+            g.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 20)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#333")
+                .style("font-size", "12px")
+                .text("CO2 Emissions (Billion Tonnes)");
+
+            g.append("text")
+                .attr("transform", `translate(${width / 2}, ${height + margin.bottom - 20})`)
+                .style("text-anchor", "middle")
+                .style("fill", "#333")
+                .style("font-size", "12px")
+                .text("Year");
+
+            // Add title
+            g.append("text")
+                .attr("x", width / 2)
+                .attr("y", 0 - (margin.top / 2))
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("font-weight", "bold")
+                .style("fill", "#333")
+                .text("Global CO2 Emissions from Fossil Fuels (1990-2022)");
+        }
+
+        // Create Scene 2: Top Emitters
+        function createScene2() {
+            const container = d3.select("#chart2");
+            container.selectAll("*").remove();
+
+            const data = processedData.byYear[2022] ? processedData.byYear[2022].slice(0, 10) : [];
+            const totalGlobal = processedData.globalTotals[2022] || 1;
+
+            if (data.length === 0) {
+                container.append("div").text("No data available for 2022");
+                return;
+            }
+
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+
+            const g = svg.append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.country))
+                .range([0, width])
+                .padding(0.2);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.emissions)])
+                .range([height, 0]);
+
+            // Add bars
+            g.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.country))
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => yScale(d.emissions))
+                .attr("height", d => height - yScale(d.emissions))
+                .attr("fill", d => colorScale(d.country))
+                .attr("stroke", "white")
+                .attr("stroke-width", 1)
+                .on("mouseover", function(event, d) {
+                    const percentage = ((d.emissions / totalGlobal) * 100).toFixed(1);
+                    showTooltip(event, `<strong>${d.country}</strong><br>Emissions: ${Math.round(d.emissions).toLocaleString()} Mt CO2<br>Global Share: ${percentage}%`);
+                    d3.select(this).attr("opacity", 0.8);
+                })
+                .on("mouseout", function() {
+                    hideTooltip();
+                    d3.select(this).attr("opacity", 1);
+                });
+
+            // Add axes
+            g.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)")
+                .style("font-size", "11px");
+
+            g.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(yScale).tickFormat(d => `${(d/1000).toFixed(0)}B`));
+
+            // Add labels
+            g.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 20)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#333")
+                .style("font-size", "12px")
+                .text("CO2 Emissions (Billion Tonnes)");
+
+            // Add title
+            g.append("text")
+                .attr("x", width / 2)
+                .attr("y", 0 - (margin.top / 2))
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("font-weight", "bold")
+                .style("fill", "#333")
+                .text("Top 10 CO2 Emitters (2022)");
+        }
+
+        // Create Scene 3: Interactive Explorer
+        let scene3Chart = null;
+
+        function createScene3() {
+            const container = d3.select("#chart3");
+            container.selectAll("*").remove();
+
+            // Create persistent chart structure
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+
+            const g = svg.append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Set up fixed scales and axes
+            const maxEmissions = d3.max(Object.values(processedData.byYear).flat(), d => d.emissions);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, maxEmissions])
+                .range([height, 0]);
+
+            // Add persistent y-axis
+            const yAxis = g.append("g")
+                .attr("class", "axis y-axis")
+                .call(d3.axisLeft(yScale).tickFormat(d => `${(d/1000).toFixed(0)}B`));
+
+            // Add persistent x-axis container
+            const xAxisG = g.append("g")
+                .attr("class", "axis x-axis")
+                .attr("transform", `translate(0,${height})`);
+
+            // Add persistent labels
+            g.append("text")
+                .attr("class", "y-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 20)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#333")
+                .style("font-size", "12px")
+                .text("CO2 Emissions (Billion Tonnes)");
+
+            // Add persistent title
+            const title = g.append("text")
+                .attr("class", "chart-title")
+                .attr("x", width / 2)
+                .attr("y", 0 - (margin.top / 2))
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("font-weight", "bold")
+                .style("fill", "#333");
+
+            // Store chart components for updates
+            scene3Chart = {
+                g: g,
+                yScale: yScale,
+                xAxisG: xAxisG,
+                title: title
+            };
+
+            updateScene3(selectedYear);
+        }
+
+        function updateScene3(year) {
+            if (!scene3Chart) return;
+
+            const data = processedData.byYear[year] ? processedData.byYear[year].slice(0, 10) : [];
+            const totalGlobal = processedData.globalTotals[year] || 1;
+
+            if (data.length === 0) return;
+
+            const { g, yScale, xAxisG, title } = scene3Chart;
+
+            // Update scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.country))
+                .range([0, width])
+                .padding(0.2);
+
+            // Update x-axis with transition
+            xAxisG.transition()
+                .duration(500)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("dx", "-.8em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)")
+                .style("font-size", "11px");
+
+            // Update title
+            title.text(`Top 10 CO2 Emitters (${year})`);
+
+            // Bind data to bars
+            const bars = g.selectAll(".bar")
+                .data(data, d => d.country);
+
+            // Remove bars for countries no longer in top 10
+            bars.exit()
+                .transition()
+                .duration(500)
+                .attr("height", 0)
+                .attr("y", height)
+                .style("opacity", 0)
+                .remove();
+
+            // Add new bars for countries entering top 10
+            const newBars = bars.enter()
+                .append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.country))
+                .attr("width", xScale.bandwidth())
+                .attr("y", height)
+                .attr("height", 0)
+                .attr("fill", d => colorScale(d.country))
+                .attr("stroke", "white")
+                .attr("stroke-width", 1)
+                .style("opacity", 0);
+
+            // Merge and update all bars
+            const allBars = newBars.merge(bars);
+
+            allBars.transition()
+                .duration(500)
+                .attr("x", d => xScale(d.country))
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => yScale(d.emissions))
+                .attr("height", d => height - yScale(d.emissions))
+                .attr("fill", d => colorScale(d.country))
+                .style("opacity", 1);
+
+            // Update hover effects
+            allBars.on("mouseover", function(event, d) {
+                const percentage = ((d.emissions / totalGlobal) * 100).toFixed(1);
+                showTooltip(event, `<strong>${d.country}</strong><br>Year: ${year}<br>Emissions: ${Math.round(d.emissions).toLocaleString()} Mt CO2<br>Global Share: ${percentage}%`);
+                d3.select(this).attr("opacity", 0.8);
+            })
+            .on("mouseout", function() {
+                hideTooltip();
+                d3.select(this).attr("opacity", 1);
+            });
+
+            // Update insights panel
+            updateInsights(year, data, totalGlobal);
+        }
+
+        function updateInsights(year, data, totalGlobal) {
+            const insights = d3.select("#scene3-insights");
+            insights.html("");
+
+            if (data.length > 0) {
+                const topEmitter = data[0];
+                const topTenTotal = d3.sum(data, d => d.emissions);
+                const topTenPercentage = ((topTenTotal / totalGlobal) * 100).toFixed(0);
+
+                insights.append("div")
+                    .attr("class", "annotation")
+                    .html(`<strong>${year} Insights:</strong><br>
+                           Top emitter: ${topEmitter.country} (${Math.round(topEmitter.emissions).toLocaleString()} Mt)<br>
+                           Top 10 represent: ${topTenPercentage}% of global emissions<br>
+                           Global total: ${Math.round(totalGlobal).toLocaleString()} Mt CO2`);
+            }
+        }
+
+        // Tooltip functions
+        function showTooltip(event, content) {
+            hideTooltip(); // Remove any existing tooltip
+            
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+
+            tooltip.html(content)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        }
+
+        function hideTooltip() {
+            d3.selectAll(".tooltip").remove();
+        }
+
+        // Scene navigation (triggers)
+        function showScene(sceneNum) {
+            // Update navigation
+            d3.selectAll(".nav-button").classed("active", false);
+            d3.select(`.nav-button:nth-child(${sceneNum})`).classed("active", true);
+
+            // Hide all scenes
+            d3.selectAll(".scene").classed("active", false);
+            
+            // Show selected scene
+            d3.select(`#scene${sceneNum}`).classed("active", true);
+            
+            currentScene = sceneNum;
+
+            // Create/update the appropriate chart
+            switch(sceneNum) {
+                case 1:
+                    createScene1();
+                    break;
+                case 2:
+                    createScene2();
+                    break;
+                case 3:
+                    createScene3();
+                    break;
+            }
+        }
+
+        // Year slider functionality (trigger)
+        function setupSlider() {
+            const slider = d3.select("#year-slider");
+            const yearDisplay = d3.select("#current-year");
+
+            slider.on("input", function() {
+                selectedYear = +this.value;
+                yearDisplay.text(selectedYear);
+                if (currentScene === 3) {
+                    updateScene3(selectedYear);
+                }
+            });
+        }
+
+        // Initialize the visualization
+        function initializeVisualization() {
+            // Setup interactive elements
+            setupSlider();
+
+            // Create initial scene
+            showScene(1);
+        }
+
+        // Start the application
+        loadData();
+    </script>
+</body>
+</html>
